@@ -1,0 +1,10 @@
+{
+  "name": "ts-graph",
+  "version": "1.0.0",
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "ts-morph": "^22.0.0",
+    "typescript": "^5.4.2"
+  }
+}
