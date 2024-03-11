@@ -30,6 +30,9 @@ const link = (source, target, type) => {
 }
 
 const isBasicType = (type) => {
+  if (type.isLiteral()) {
+    return true;
+  }
   const typeName = type.getText();
   // List of base JavaScript types
   const baseTypes = [
@@ -128,17 +131,28 @@ const getTypeParts = (type) => {
   if (isBasicType(type)) {
     return [type];
   }
-  // if (type.getText().startsWith("Promise<")) {
-    const matches = 
-      Reflect.ownKeys(type.__proto__)
-      .filter(key => 
-        key.startsWith('is')
-        && !['isAssignableTo'].includes(key)
-        && type[key]()
-      )
-    console.warn(`Unparseable type: ${type.getText()}\n  matches: [${matches}]`);
-  // }
-  return [type]
+  const targetType = type.getTargetType()
+  const typeArguments = type.getTypeArguments();
+  if (targetType === type) {
+    return [type];
+  }
+  if (targetType && typeArguments.length > 0) {
+    return [targetType, ...typeArguments].map(t => getTypeParts(t)).flat();
+  }
+  // idk how to further decompose this type (except type arguments)
+  const matches = 
+    Reflect.ownKeys(type.__proto__)
+    .filter(key => 
+      key.startsWith('is')
+      && !['isAssignableTo'].includes(key)
+      && type[key]()
+    )
+  console.warn(`Unparseable type: ${type.getText()}\n  matches: [${matches}]`);
+  console.warn('  target:', targetType?.getText())
+  console.warn('  type args:', typeArguments.map(t => t.getText()));
+  console.warn('  symbol:', type.getSymbol()?.getName())
+
+  return [type, ...typeArguments]
 };
 
 const analyzeClass = (classDeclaration) => {
@@ -209,11 +223,6 @@ const analyzeInterface = (interfaceDeclaration) => {
         }
       }
 
-      // const allPartLabels = allParts.map(p => p.getText());
-      // if (returnType !== "void") {
-      //   // graph[interfaceName].uses.push(...allPartLabels);
-      // }
-
       // Analyze parameters
       for (const param of method.getParameters()) {
         const paramType = param.getType();
@@ -224,8 +233,6 @@ const analyzeInterface = (interfaceDeclaration) => {
             link(interfaceName, partLabel, "call arg");
           }
         }
-        // Add parameter types to 'uses'
-        // graph[interfaceName].uses.push(paramType);
       }
     }
 };
@@ -259,9 +266,15 @@ function escapeDotString(str) {
   return str
     // Escapes double quotes by prefixing them with a backslash
     .replace(/(["])/g, '\\$1')
-    // Sanitizes the string to create a valid DOT identifier
-    // This example removes or replaces special characters, but you might adjust the logic
-    .replace(/[^a-zA-Z0-9]/g, '_');
+    // // Sanitizes the string to create a valid DOT identifier
+    // // This example removes or replaces special characters, but you might adjust the logic
+    // .replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function escapeId (id) {
+  // Sanitizes the string to create a valid DOT identifier
+  // This example removes or replaces special characters, but you might adjust the logic
+  return id.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 function generateDotFile(graph) {
@@ -270,14 +283,14 @@ function generateDotFile(graph) {
   
   // For each node, add a node declaration
   for (const [id, node] of Object.entries(graph.nodes)) {
-      dot += `  ${escapeDotString(id)} [label="${escapeDotString(node.label)}"];\n`;
+      dot += `  ${escapeId(id)} [label="${escapeDotString(node.label)}"];\n`;
   }
   
   // For each link, add an edge declaration
   for (const link of graph.links) {
       // const arrow = link.type === 'directed' ? '->' : '--';
       const arrow = '->';
-      dot += `  ${escapeDotString(link.source)} ${arrow} ${escapeDotString(link.target)};\n`;
+      dot += `  ${escapeId(link.source)} ${arrow} ${escapeId(link.target)};\n`;
   }
   
   dot += '}\n';
